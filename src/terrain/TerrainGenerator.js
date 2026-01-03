@@ -118,83 +118,139 @@ export default class TerrainGenerator {
             }
         }
 
+        const heightMap = new Float32Array(size * size);
+        const heightCeilMap = new Int32Array(size * size);
+
         for (let i = 0; i < size; i++) {
             for (let k = 0; k < size; k++) {
                 const worldX = x * size + i;
                 const worldZ = z * size + k;
-                
+
                 let height = this.getHeightAt(worldX, worldZ);
-                
-                // Flatten terrain for castle
-                if (hasCastle && i >= 2 && i <= size - 3 && k >= 2 && k <= size - 3) {
-                     height = castleBaseHeight;
+
+                if (!Number.isFinite(height)) {
+                    throw new Error('generateChunk requires numeric terrain heights.');
                 }
-                
-                // Flatten terrain for buildings
+
+                if (hasCastle && i >= 2 && i <= size - 3 && k >= 2 && k <= size - 3) {
+                    height = castleBaseHeight;
+                }
+
                 const spotIndex = buildingIndex[i * size + k];
                 if (spotIndex >= 0) {
                     height = buildingSpots[spotIndex].baseHeight;
                 }
 
-                for (let j = 0; j < size; j++) {
-                    const voxelY = y * size + j;
-                    let isVoxel = voxelY < height ? 1 : 0;
+                if (!Number.isFinite(height)) {
+                    throw new Error('generateChunk requires numeric column heights.');
+                }
 
-                    // Add buildings
-                    if (!hasCastle && spotIndex >= 0) {
-                        const spot = buildingSpots[spotIndex];
-                        if (voxelY >= spot.baseHeight && voxelY < spot.baseHeight + spot.height) {
-                            const localY = Math.floor(voxelY - spot.baseHeight);
+                heightMap[i * size + k] = height;
+                heightCeilMap[i * size + k] = Math.ceil(height);
+            }
+        }
+
+        const baseY = y * size;
+
+        for (let i = 0; i < size; i++) {
+            for (let k = 0; k < size; k++) {
+                const columnIndex = i * size + k;
+                const height = heightMap[columnIndex];
+                const heightCeil = heightCeilMap[columnIndex];
+
+                if (!Number.isFinite(height) || !Number.isFinite(heightCeil)) {
+                    throw new Error('generateChunk requires numeric column heights.');
+                }
+
+                const terrainCount = Math.min(size, heightCeil - baseY);
+                if (terrainCount > 0) {
+                    const clampedTerrain = Math.min(size, terrainCount);
+                    for (let j = 0; j < clampedTerrain; j++) {
+                        voxels[i * size * size + j * size + k] = 1;
+                    }
+                }
+
+                const spotIndex = buildingIndex[columnIndex];
+                if (!hasCastle && spotIndex >= 0) {
+                    const spot = buildingSpots[spotIndex];
+                    const startY = Math.ceil(spot.baseHeight - baseY);
+                    const endY = Math.min(size, Math.ceil(spot.baseHeight + spot.height - baseY));
+
+                    if (!Number.isFinite(startY) || !Number.isFinite(endY)) {
+                        throw new Error('generateChunk encountered invalid building bounds.');
+                    }
+
+                    if (endY > startY) {
+                        const localX = i - spot.lx;
+                        const localZ = k - spot.lz;
+
+                        if (localX < 0 || localZ < 0 || localX >= spot.width || localZ >= spot.depth) {
+                            throw new Error('generateChunk encountered an invalid building local coordinate.');
+                        }
+
+                        for (let j = Math.max(0, startY); j < endY; j++) {
+                            const localY = Math.floor(baseY + j - spot.baseHeight);
 
                             if (!Number.isFinite(localY)) {
                                 throw new Error('generateChunk encountered an invalid building localY.');
                             }
 
                             if (localY >= 0 && localY < spot.height) {
-                                const localX = i - spot.lx;
-                                const localZ = k - spot.lz;
-
-                                if (localX < 0 || localZ < 0 || localX >= spot.width || localZ >= spot.depth) {
-                                    throw new Error('generateChunk encountered an invalid building local coordinate.');
-                                }
-
                                 const bVoxel = spot.template[localX * spot.height * spot.depth + localY * spot.depth + localZ];
                                 if (!Number.isFinite(bVoxel)) {
                                     throw new Error('generateChunk encountered a non-numeric building voxel.');
                                 }
 
-                                if (bVoxel !== 0) isVoxel = bVoxel;
+                                if (bVoxel !== 0) {
+                                    voxels[i * size * size + j * size + k] = bVoxel;
+                                }
                             }
                         }
                     }
-                    
-                    // Add Castle
-                    if (hasCastle && voxelY >= height) {
-                        const cx = i - size/2; 
-                        const cz = k - size/2;
-                        const cy = voxelY - height;
-                        
+                }
+
+                if (hasCastle) {
+                    const wallHeight = 8;
+                    const towerHeight = 12;
+                    const castleTop = height + towerHeight + 4;
+                    const startY = Math.ceil(height - baseY);
+                    const endY = Math.min(size, Math.ceil(castleTop - baseY));
+
+                    if (!Number.isFinite(startY) || !Number.isFinite(endY)) {
+                        throw new Error('generateChunk encountered invalid castle bounds.');
+                    }
+
+                    if (endY > startY) {
+                        const cx = i - size / 2;
+                        const cz = k - size / 2;
                         const innerSize = Math.floor(size / 2) - 2;
-                        const wallHeight = 8;
-                        const towerHeight = 12;
-                        
+
                         const isTower = (Math.abs(cx) > innerSize - 2 && Math.abs(cz) > innerSize - 2) && (Math.abs(cx) < innerSize + 1 && Math.abs(cz) < innerSize + 1);
                         const isWallX = (Math.abs(cx) > innerSize - 2 && Math.abs(cx) < innerSize) && (Math.abs(cz) <= innerSize - 2);
                         const isWallZ = (Math.abs(cz) > innerSize - 2 && Math.abs(cz) < innerSize) && (Math.abs(cx) <= innerSize - 2);
                         const isKeep = (Math.abs(cx) <= 2 && Math.abs(cz) <= 2);
-                        
-                        if (isTower && cy < towerHeight) {
-                             isVoxel = 3;
-                             if (cy === towerHeight - 1 && (cx + cz) % 2 !== 0) isVoxel = 0;
-                        } else if ((isWallX || isWallZ) && cy < wallHeight) {
-                             isVoxel = 3;
-                             if (cy === wallHeight - 1 && (cx + cz) % 2 !== 0) isVoxel = 0;
-                        } else if (isKeep && cy < towerHeight + 4) {
-                             isVoxel = 3;
+
+                        for (let j = Math.max(0, startY); j < endY; j++) {
+                            const voxelY = baseY + j;
+                            const cy = voxelY - height;
+
+                            if (isTower && cy < towerHeight) {
+                                if (cy === towerHeight - 1 && (cx + cz) % 2 !== 0) {
+                                    voxels[i * size * size + j * size + k] = 0;
+                                } else {
+                                    voxels[i * size * size + j * size + k] = 3;
+                                }
+                            } else if ((isWallX || isWallZ) && cy < wallHeight) {
+                                if (cy === wallHeight - 1 && (cx + cz) % 2 !== 0) {
+                                    voxels[i * size * size + j * size + k] = 0;
+                                } else {
+                                    voxels[i * size * size + j * size + k] = 3;
+                                }
+                            } else if (isKeep && cy < towerHeight + 4) {
+                                voxels[i * size * size + j * size + k] = 3;
+                            }
                         }
                     }
-
-                    voxels[i * size * size + j * size + k] = isVoxel;
                 }
             }
         }

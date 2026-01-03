@@ -1,6 +1,6 @@
 # Apache Voxel Engine
 
-A retro-style, high-performance voxel arcade shooter built with Three.js. Pilot through a procedurally generated world, engage enemy aircraft, and rain destruction upon soldiers and buildings.
+A retro-style, high-performance voxel arcade shooter built with Three.js. Pilot an airplane through a procedurally generated world, engage enemy aircraft, and rain destruction upon soldiers and buildings.
 
 
 ![Gameplay](gameplay.gif)
@@ -10,7 +10,7 @@ A retro-style, high-performance voxel arcade shooter built with Three.js. Pilot 
 - **Retro Aesthetic:** Pixelated 320x240 rendering scaled for a classic DOS-era look.
 - **Dynamic Terrain:** Fully destructible voxel world with mountain and building generation.
 - **Matter Conservation:** Destructive explosions create craters and spawn persistent debris that settles back onto the terrain.
-- **Arcade Flight Mechanics:** Snappy helicopter controls with auto-stabilization and altitude hold.
+- **Arcade Flight Mechanics:** Snappy airplane controls with auto-stabilization and altitude hold.
 - **Ancient Rome Setting:** Encounter organized Roman cohorts (1,000+ individual units) that march in formation and panic under fire.
 - **Medieval Landmarks:** Procedural stone castles with towers and battlements.
 
@@ -18,11 +18,16 @@ A retro-style, high-performance voxel arcade shooter built with Three.js. Pilot 
 
 | Key | Action |
 |-----|--------|
-| **W / S** | Pitch Forward / Back (Accelerate) |
-| **A / D** | Yaw (Turn) Left / Right |
-| **Q / E** | Roll (Bank) Left / Right |
-| **Space** | Increase Altitude (Lift) |
-| **Shift** | Decrease Altitude |
+| **W** | Pitch Down |
+| **S** | Pitch Up |
+| **A** | Roll Left |
+| **D** | Roll Right |
+| **Q** | Yaw Left |
+| **E** | Yaw Right |
+| **Space** | Increase Altitude |
+| **C** | Decrease Altitude |
+| **Shift** | Increase Throttle |
+| **Ctrl** | Decrease Throttle |
 | **Click** | Fire Missile |
 
 ## Tech Stack

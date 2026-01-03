@@ -212,8 +212,13 @@ export default class VoxelEngine {
         this.queueCollapse(affectedChunks);
 
         // Re-render affected chunks
+        const chunksToRender = new Set();
         for (const chunk of affectedChunks) {
-            this.voxelRenderer.renderChunk(chunk);
+            this.addNeighborChunksToSet(chunk, chunksToRender, true);
+        }
+
+        for (const chunk of chunksToRender) {
+            this.queueChunkMesh(chunk);
         }
     }
 
@@ -347,7 +352,8 @@ export default class VoxelEngine {
                             belowChunk = this.chunks.get(belowKey);
 
                             if (!belowChunk) {
-                                throw new Error('performCollapseStep requires the chunk below to be loaded.');
+                                this.queueChunkGeneration(chunk.x, chunk.y - 1, chunk.z);
+                                continue;
                             }
 
                             if (!Number.isFinite(belowChunk.size) || belowChunk.size !== size) {
@@ -415,7 +421,8 @@ export default class VoxelEngine {
                     belowChunk = this.chunks.get(belowKey);
 
                     if (!belowChunk) {
-                        throw new Error('performCollapseStep requires the chunk below to be loaded for landing checks.');
+                        this.queueChunkGeneration(move.toChunk.x, move.toChunk.y - 1, move.toChunk.z);
+                        continue;
                     }
 
                     if (!Number.isFinite(belowChunk.size) || belowChunk.size !== size) {
@@ -507,8 +514,13 @@ export default class VoxelEngine {
             }
         }
 
+        const renderWithNeighbors = new Set();
         for (const chunk of chunksToRender) {
-            this.voxelRenderer.renderChunk(chunk);
+            this.addNeighborChunksToSet(chunk, renderWithNeighbors, true);
+        }
+
+        for (const chunk of renderWithNeighbors) {
+            this.queueChunkMesh(chunk);
         }
     }
 
@@ -631,6 +643,7 @@ export default class VoxelEngine {
         const chunkZ = Math.floor(cameraPos.z / this.chunkSize);
 
         const activeKeys = new Set();
+        const chunksToRender = new Set();
 
         for (let x = chunkX - this.renderDistance; x <= chunkX + this.renderDistance; x++) {
             for (let y = chunkY - this.renderDistance; y <= chunkY + this.renderDistance; y++) {
@@ -639,10 +652,7 @@ export default class VoxelEngine {
                     activeKeys.add(key);
 
                     if (!this.chunks.has(key)) {
-                        const voxels = this.terrainGenerator.generateChunk(x, y, z, this.chunkSize);
-                        const chunk = new Chunk(x, y, z, voxels, this.chunkSize);
-                        this.voxelRenderer.renderChunk(chunk);
-                        this.chunks.set(key, chunk);
+                        this.queueChunkGeneration(x, y, z);
                     }
                 }
             }

@@ -7,12 +7,11 @@ A retro-style, high-performance voxel arcade shooter built with Three.js. Pilot 
 
 ## Features
 
-- **Retro Aesthetic:** Pixelated 320x240 rendering scaled for a classic DOS-era look.
-- **Dynamic Terrain:** Fully destructible voxel world with mountain and building generation.
-- **Matter Conservation:** Destructive explosions create craters and spawn persistent debris that settles back onto the terrain.
-- **Arcade Flight Mechanics:** Snappy airplane controls with auto-stabilization and altitude hold.
-- **Ancient Rome Setting:** Encounter organized Roman cohorts (1,000+ individual units) that march in formation and panic under fire.
-- **Medieval Landmarks:** Procedural stone castles with towers and battlements.
+- Pixelated 320x240 rendering scaled for a classic DOS-era look.
+- Fully destructible voxel world with mountain and building generation.
+- Destructive explosions create craters and spawn persistent debris that settles back onto the terrain.
+- Encounter organized Roman cohorts (1,000+ individual units) that march in formation and panic under fire.
+- Procedural stone buildings with towers and battlements.
 
 ## Controls
 

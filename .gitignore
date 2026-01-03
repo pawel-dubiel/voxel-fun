@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+package-lock.json
+
+# Build output
+dist/
+
+# Temporary files
+/Users/pawel/.gemini/tmp/
+*.log
+
+# IDE files
+.vscode/
+.idea/
+.DS_Store

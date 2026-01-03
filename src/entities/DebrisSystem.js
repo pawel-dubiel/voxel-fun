@@ -2,23 +2,59 @@ import * as THREE from 'three';
 
 export default class DebrisSystem {
     constructor(scene, maxParticles = 10000) {
+        if (!scene) {
+            throw new Error('DebrisSystem requires a scene.');
+        }
+
+        if (!Number.isFinite(maxParticles) || maxParticles <= 0) {
+            throw new Error('DebrisSystem requires a positive maxParticles.');
+        }
+
         this.scene = scene;
         this.maxParticles = maxParticles;
         this.particles = []; 
         this.cursor = 0; // Ring buffer cursor
         this.impactTTL = 0.7;
+        this.bloodMaxParticles = Math.max(300, Math.floor(this.maxParticles * 0.2));
+        this.bloodParticles = [];
+        this.bloodCursor = 0;
+        this.bloodTTL = 1.1;
         
         // Small cubes for debris, matching voxel size roughly (or slightly smaller for style)
         const geometry = new THREE.BoxGeometry(0.8, 0.8, 0.8); 
-        const material = new THREE.MeshBasicMaterial({ color: 0xffffff }); 
+        const material = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            roughness: 0.85,
+            metalness: 0.08,
+            emissive: 0x111111,
+            emissiveIntensity: 0.2,
+            vertexColors: true
+        }); 
         
         this.mesh = new THREE.InstancedMesh(geometry, material, maxParticles);
         this.mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
         this.mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(maxParticles * 3), 3);
         this.scene.add(this.mesh);
+
+        const bloodGeometry = new THREE.BoxGeometry(0.45, 0.45, 0.45);
+        const bloodMaterial = new THREE.MeshBasicMaterial({
+            color: 0xff0000,
+            transparent: false,
+            opacity: 1,
+            depthWrite: false,
+            depthTest: true,
+            blending: THREE.NormalBlending,
+            fog: false
+        });
+        bloodMaterial.toneMapped = false;
+
+        this.bloodMesh = new THREE.InstancedMesh(bloodGeometry, bloodMaterial, this.bloodMaxParticles);
+        this.bloodMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+        this.scene.add(this.bloodMesh);
         
         this.dummy = new THREE.Object3D();
         this.colorDummy = new THREE.Color();
+        this.bloodDummy = new THREE.Object3D();
         
         // Initialize pool
         for(let i=0; i<maxParticles; i++) {
@@ -34,9 +70,34 @@ export default class DebrisSystem {
             this.dummy.updateMatrix();
             this.mesh.setMatrixAt(i, this.dummy.matrix);
         }
+
+        for (let i = 0; i < this.bloodMaxParticles; i++) {
+            this.bloodParticles.push({
+                position: new THREE.Vector3(0, -1000, 0),
+                velocity: new THREE.Vector3(),
+                active: false,
+                resting: true,
+                ttl: null
+            });
+            this.bloodDummy.position.set(0, -1000, 0);
+            this.bloodDummy.updateMatrix();
+            this.bloodMesh.setMatrixAt(i, this.bloodDummy.matrix);
+        }
     }
     
     spawn(position, count, colorHex) {
+        if (!position || !Number.isFinite(position.x) || !Number.isFinite(position.y) || !Number.isFinite(position.z)) {
+            throw new Error('spawn requires a position with numeric x, y, z.');
+        }
+
+        if (!Number.isFinite(count) || count <= 0) {
+            throw new Error('spawn requires a positive particle count.');
+        }
+
+        if (!Number.isFinite(colorHex)) {
+            throw new Error('spawn requires a numeric color.');
+        }
+
         this.colorDummy.setHex(colorHex);
 
         for (let k = 0; k < count; k++) {
@@ -65,6 +126,63 @@ export default class DebrisSystem {
         }
         
         this.mesh.instanceColor.needsUpdate = true;
+    }
+
+    spawnBlood(position, count, colorHex) {
+        if (!position || !Number.isFinite(position.x) || !Number.isFinite(position.y) || !Number.isFinite(position.z)) {
+            throw new Error('spawnBlood requires a position with numeric x, y, z.');
+        }
+
+        if (!Number.isFinite(count) || count <= 0) {
+            throw new Error('spawnBlood requires a positive particle count.');
+        }
+
+        if (!Number.isFinite(colorHex)) {
+            throw new Error('spawnBlood requires a numeric color.');
+        }
+
+        if (!Number.isFinite(this.bloodTTL) || this.bloodTTL <= 0) {
+            throw new Error('spawnBlood requires a positive bloodTTL.');
+        }
+
+        if (!this.bloodMesh || !this.bloodMesh.material || !this.bloodMesh.material.color) {
+            throw new Error('spawnBlood requires a blood mesh with a color material.');
+        }
+
+        this.bloodMesh.material.color.setHex(colorHex);
+
+        const jitter = 0.7;
+        const horizontalSpeed = 6;
+        const upwardSpeed = 8;
+        const baseLift = 1.2;
+
+        for (let k = 0; k < count; k++) {
+            const i = this.bloodCursor;
+            this.bloodCursor = (this.bloodCursor + 1) % this.bloodMaxParticles;
+
+            const p = this.bloodParticles[i];
+            p.active = true;
+            p.resting = false;
+            p.ttl = this.bloodTTL;
+            p.position.copy(position);
+
+            p.position.y += baseLift;
+            p.position.x += (Math.random() - 0.5) * jitter;
+            p.position.y += (Math.random() - 0.5) * jitter;
+            p.position.z += (Math.random() - 0.5) * jitter;
+
+            p.velocity.set(
+                (Math.random() - 0.5) * horizontalSpeed,
+                (Math.random() * upwardSpeed) + 1,
+                (Math.random() - 0.5) * horizontalSpeed
+            );
+
+            this.bloodDummy.position.copy(p.position);
+            this.bloodDummy.updateMatrix();
+            this.bloodMesh.setMatrixAt(i, this.bloodDummy.matrix);
+        }
+
+        this.bloodMesh.instanceMatrix.needsUpdate = true;
     }
 
     spawnImpact(position, count, colorHex) {
@@ -117,6 +235,14 @@ export default class DebrisSystem {
     }
     
     update(deltaTime, collisionCallback) {
+        if (!Number.isFinite(deltaTime)) {
+            throw new Error('update requires a numeric deltaTime.');
+        }
+
+        if (typeof collisionCallback !== 'function') {
+            throw new Error('update requires a collisionCallback function.');
+        }
+
         let needsUpdate = false;
 
         for (let i = 0; i < this.maxParticles; i++) {
@@ -187,6 +313,61 @@ export default class DebrisSystem {
         
         if (needsUpdate) {
             this.mesh.instanceMatrix.needsUpdate = true;
+        }
+
+        let bloodNeedsUpdate = false;
+
+        for (let i = 0; i < this.bloodMaxParticles; i++) {
+            const p = this.bloodParticles[i];
+
+            if (p.active) {
+                if (p.ttl !== null) {
+                    if (!Number.isFinite(p.ttl)) {
+                        throw new Error('update encountered a blood particle with invalid ttl.');
+                    }
+
+                    p.ttl -= deltaTime;
+
+                    if (p.ttl <= 0) {
+                        p.active = false;
+                        p.resting = true;
+                        p.ttl = null;
+                        p.velocity.set(0, 0, 0);
+                        p.position.set(0, -1000, 0);
+                        this.bloodDummy.position.copy(p.position);
+                        this.bloodDummy.rotation.set(0, 0, 0);
+                        this.bloodDummy.updateMatrix();
+                        this.bloodMesh.setMatrixAt(i, this.bloodDummy.matrix);
+                        bloodNeedsUpdate = true;
+                        continue;
+                    }
+                }
+            }
+
+            if (p.active && !p.resting) {
+                p.velocity.y -= 32 * deltaTime;
+
+                const nextPos = p.position.clone().addScaledVector(p.velocity, deltaTime);
+
+                if (collisionCallback(nextPos.x, nextPos.y, nextPos.z)) {
+                    p.resting = true;
+                    p.velocity.set(0, 0, 0);
+                } else if (nextPos.y < 0) {
+                    p.resting = true;
+                    p.position.y = 0;
+                } else {
+                    p.position.copy(nextPos);
+                }
+
+                this.bloodDummy.position.copy(p.position);
+                this.bloodDummy.updateMatrix();
+                this.bloodMesh.setMatrixAt(i, this.bloodDummy.matrix);
+                bloodNeedsUpdate = true;
+            }
+        }
+
+        if (bloodNeedsUpdate) {
+            this.bloodMesh.instanceMatrix.needsUpdate = true;
         }
     }
 }

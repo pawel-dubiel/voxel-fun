@@ -36,9 +36,29 @@ export default class Helicopter {
         this.group.position.copy(this.position);
 
         this.bodyGeometry = new THREE.BoxGeometry(1, 1, 1);
-        this.bodyMaterial = new THREE.MeshLambertMaterial({ color: 0xcc3333 });
-        this.detailMaterial = new THREE.MeshLambertMaterial({ color: 0x222222 });
-        this.glassMaterial = new THREE.MeshLambertMaterial({ color: 0x335577 });
+        this.bodyMaterial = new THREE.MeshStandardMaterial({
+            color: 0xcc3333,
+            roughness: 0.5,
+            metalness: 0.2,
+            emissive: 0x220909,
+            emissiveIntensity: 0.08
+        });
+        this.detailMaterial = new THREE.MeshStandardMaterial({
+            color: 0x222222,
+            roughness: 0.8,
+            metalness: 0.3,
+            emissive: 0x050505,
+            emissiveIntensity: 0.05
+        });
+        this.glassMaterial = new THREE.MeshStandardMaterial({
+            color: 0x335577,
+            roughness: 0.2,
+            metalness: 0,
+            emissive: 0x0c1b24,
+            emissiveIntensity: 0.3,
+            transparent: true,
+            opacity: 0.65
+        });
 
         const addVoxel = (x, y, z, material) => {
             if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {

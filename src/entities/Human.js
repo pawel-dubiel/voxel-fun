@@ -18,9 +18,27 @@ export default class Human {
         this.group.position.copy(this.position);
         
         // Materials (Roman style: red/white)
-        const skinMat = new THREE.MeshLambertMaterial({ color: 0xffccaa });
-        const shirtMat = new THREE.MeshLambertMaterial({ color: cohort ? 0x990000 : 0xdddddd }); 
-        const pantsMat = new THREE.MeshLambertMaterial({ color: 0x332211 });
+        const skinMat = new THREE.MeshStandardMaterial({
+            color: 0xffccaa,
+            roughness: 0.75,
+            metalness: 0.02,
+            emissive: 0x1a0f0a,
+            emissiveIntensity: 0.05
+        });
+        const shirtMat = new THREE.MeshStandardMaterial({
+            color: cohort ? 0x990000 : 0xdddddd,
+            roughness: 0.9,
+            metalness: 0.02,
+            emissive: 0x1b0b0b,
+            emissiveIntensity: 0.05
+        }); 
+        const pantsMat = new THREE.MeshStandardMaterial({
+            color: 0x332211,
+            roughness: 0.95,
+            metalness: 0.01,
+            emissive: 0x0a0603,
+            emissiveIntensity: 0.04
+        });
         
         // Head
         const headGeo = new THREE.BoxGeometry(0.3, 0.3, 0.3);
@@ -37,7 +55,13 @@ export default class Human {
         // Optional: Simple Shield for Romans
         if (cohort) {
             const shieldGeo = new THREE.BoxGeometry(0.3, 0.5, 0.1);
-            const shieldMat = new THREE.MeshLambertMaterial({ color: 0xaa8822 });
+            const shieldMat = new THREE.MeshStandardMaterial({
+                color: 0xaa8822,
+                roughness: 0.8,
+                metalness: 0.2,
+                emissive: 0x241c07,
+                emissiveIntensity: 0.06
+            });
             const shield = new THREE.Mesh(shieldGeo, shieldMat);
             shield.position.set(0.3, 1.0, 0.15);
             this.group.add(shield);

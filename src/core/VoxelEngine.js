@@ -180,9 +180,7 @@ export default class VoxelEngine {
         const center = position.clone();
         const r2 = radius * radius;
 
-        let terrainDestroyed = 0;
-        let buildingDestroyed = 0;
-        let castleDestroyed = 0;
+        const destroyedByType = new Map();
 
         for (let x = -radius; x <= radius; x++) {
             for (let y = -radius; y <= radius; y++) {
@@ -196,9 +194,8 @@ export default class VoxelEngine {
                         const voxelType = this.getVoxel(worldX, worldY, worldZ);
                         // Only remove solid blocks
                         if (voxelType > 0) {
-                            if (voxelType === 1) terrainDestroyed++;
-                            else if (voxelType === 3) castleDestroyed++;
-                            else buildingDestroyed++; // Types 2, 4, 5, 6, 7, 8 are all "building" components
+                            const currentCount = destroyedByType.get(voxelType) || 0;
+                            destroyedByType.set(voxelType, currentCount + 1);
 
                             const chunk = this.setVoxel(worldX, worldY, worldZ, 0);
                             if (chunk) affectedChunks.add(chunk);
@@ -208,15 +205,18 @@ export default class VoxelEngine {
             }
         }
 
-        // Spawn debris based on what was destroyed
-        if (terrainDestroyed > 0) {
-            this.debrisSystem.spawn(position, terrainDestroyed, 0x228B22);
-        }
-        if (buildingDestroyed > 0) {
-            this.debrisSystem.spawn(position, buildingDestroyed, 0x808080);
-        }
-        if (castleDestroyed > 0) {
-            this.debrisSystem.spawn(position, castleDestroyed, 0x666666);
+        // Spawn debris based on exact voxel types destroyed
+        for (const [voxelType, count] of destroyedByType.entries()) {
+            if (!Number.isFinite(voxelType) || voxelType <= 0) {
+                throw new Error('createExplosion requires positive voxel types for debris.');
+            }
+
+            if (!Number.isFinite(count) || count <= 0) {
+                throw new Error('createExplosion requires positive debris counts.');
+            }
+
+            const color = this.getVoxelDebrisColor(voxelType);
+            this.debrisSystem.spawn(position, count, color);
         }
 
         this.queueCollapse(affectedChunks);
@@ -512,14 +512,7 @@ export default class VoxelEngine {
 
                     impactPosition.set(impact.x, impact.y, impact.z);
 
-                    let color = 0x808080;
-                    if (impact.voxelType === 1) color = 0x228B22;
-                    else if (impact.voxelType === 3) color = 0x666666;
-                    else if (impact.voxelType === 4 || impact.voxelType === 8) color = 0x5d4037;
-                    else if (impact.voxelType === 6) color = 0x303f9f;
-                    else if (impact.voxelType === 9) color = 0xb71c1c;
-                    else if (impact.voxelType === 10) color = 0x1b5e20;
-
+                    const color = this.getVoxelDebrisColor(impact.voxelType);
                     this.debrisSystem.spawnImpact(impactPosition, count, color);
                     impactBudget -= 1;
                 }
@@ -567,7 +560,7 @@ export default class VoxelEngine {
                  if (missile.position.distanceTo(human.position) < 2) {
                       human.destroy();
                       this.humans.splice(j, 1);
-                      this.debrisSystem.spawn(human.position, 10, 0xff0000);
+                      this.debrisSystem.spawnBlood(human.position, 24, 0xff0000);
                  }
             }
 
@@ -582,7 +575,7 @@ export default class VoxelEngine {
                     if (dist < 8) {
                          human.destroy();
                          this.humans.splice(j, 1);
-                         this.debrisSystem.spawn(human.position, 10, 0xff0000);
+                         this.debrisSystem.spawnBlood(human.position, 24, 0xff0000);
                     } else if (dist < 25) {
                          human.panic(); // Trigger panic behavior
                     }
@@ -886,6 +879,37 @@ export default class VoxelEngine {
             const key = this.getChunkKey(x + offset[0], y + offset[1], z + offset[2]);
             const neighbor = this.chunks.get(key);
             if (neighbor) targetSet.add(neighbor);
+        }
+    }
+
+    getVoxelDebrisColor(voxelType) {
+        if (!Number.isFinite(voxelType)) {
+            throw new Error('getVoxelDebrisColor requires a numeric voxelType.');
+        }
+
+        switch (voxelType) {
+            case 1:
+                return 0x228B22;
+            case 2:
+                return 0x808080;
+            case 3:
+                return 0x666666;
+            case 4:
+                return 0x5d4037;
+            case 5:
+                return 0xe0e0e0;
+            case 6:
+                return 0x303f9f;
+            case 7:
+                return 0x81d4fa;
+            case 8:
+                return 0x3e2723;
+            case 9:
+                return 0xb71c1c;
+            case 10:
+                return 0x1b5e20;
+            default:
+                throw new Error('getVoxelDebrisColor requires a supported voxel type.');
         }
     }
 }

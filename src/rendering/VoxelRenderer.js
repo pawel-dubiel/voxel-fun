@@ -4,21 +4,297 @@ export default class VoxelRenderer {
 
     constructor(scene) {
 
+        if (!scene) {
+            throw new Error('VoxelRenderer requires a scene.');
+        }
+
         this.scene = scene;
 
-        this.terrainMaterial = new THREE.MeshLambertMaterial({ color: 0x228B22 }); // Forest Green
+        const surfaceShaderParams = {
+            noiseScale: 0.1,
+            noiseStrength: 0.12,
+            rimStrength: 0.18,
+            rimPower: 2.4,
+            heightGradientStrength: 0.18,
+            heightGradientScale: 0.02,
+            heightGradientOffset: 6
+        };
 
-        this.buildingMaterial = new THREE.MeshLambertMaterial({ color: 0x808080 });
-        
-        this.castleMaterial = new THREE.MeshLambertMaterial({ color: 0x666666 }); // Stone Gray
-        this.woodMaterial = new THREE.MeshLambertMaterial({ color: 0x5d4037 }); // Brown
-        this.plasterMaterial = new THREE.MeshLambertMaterial({ color: 0xe0e0e0 }); // Off-white
-        this.roofMaterial = new THREE.MeshLambertMaterial({ color: 0x303f9f }); // Indigo roof
-        this.roofRedMaterial = new THREE.MeshLambertMaterial({ color: 0xb71c1c }); // Dark Red roof
-        this.roofGreenMaterial = new THREE.MeshLambertMaterial({ color: 0x1b5e20 }); // Dark Green roof
-        this.windowMaterial = new THREE.MeshLambertMaterial({ color: 0x81d4fa, transparent: true, opacity: 0.6 }); // Light Blue Glass
-        this.woodDarkMaterial = new THREE.MeshLambertMaterial({ color: 0x3e2723 }); // Dark Brown
+        const glassShaderParams = {
+            noiseScale: 0.25,
+            noiseStrength: 0.04,
+            rimStrength: 0.35,
+            rimPower: 2.8,
+            heightGradientStrength: 0.08,
+            heightGradientScale: 0.02,
+            heightGradientOffset: 4
+        };
 
+        this.terrainMaterial = this.createStylizedMaterial({
+            color: 0x2f7d3b,
+            roughness: 0.95,
+            metalness: 0.02,
+            emissive: 0x0b1b0b,
+            emissiveIntensity: 0.12,
+            transparent: false,
+            opacity: 1
+        }, surfaceShaderParams);
+
+        this.buildingMaterial = this.createStylizedMaterial({
+            color: 0x8b8b8b,
+            roughness: 0.85,
+            metalness: 0.08,
+            emissive: 0x111111,
+            emissiveIntensity: 0.08,
+            transparent: false,
+            opacity: 1
+        }, surfaceShaderParams);
+
+        this.castleMaterial = this.createStylizedMaterial({
+            color: 0x6f6f6f,
+            roughness: 0.78,
+            metalness: 0.12,
+            emissive: 0x0f0f0f,
+            emissiveIntensity: 0.08,
+            transparent: false,
+            opacity: 1
+        }, surfaceShaderParams);
+
+        this.woodMaterial = this.createStylizedMaterial({
+            color: 0x7a4b2a,
+            roughness: 0.92,
+            metalness: 0.03,
+            emissive: 0x0f0804,
+            emissiveIntensity: 0.1,
+            transparent: false,
+            opacity: 1
+        }, surfaceShaderParams);
+
+        this.plasterMaterial = this.createStylizedMaterial({
+            color: 0xe6e0d7,
+            roughness: 0.82,
+            metalness: 0.02,
+            emissive: 0x1a1712,
+            emissiveIntensity: 0.05,
+            transparent: false,
+            opacity: 1
+        }, surfaceShaderParams);
+
+        this.roofMaterial = this.createStylizedMaterial({
+            color: 0x3f5aa5,
+            roughness: 0.6,
+            metalness: 0.18,
+            emissive: 0x10162f,
+            emissiveIntensity: 0.12,
+            transparent: false,
+            opacity: 1
+        }, surfaceShaderParams);
+
+        this.roofRedMaterial = this.createStylizedMaterial({
+            color: 0xb23b33,
+            roughness: 0.65,
+            metalness: 0.15,
+            emissive: 0x2a0b0a,
+            emissiveIntensity: 0.12,
+            transparent: false,
+            opacity: 1
+        }, surfaceShaderParams);
+
+        this.roofGreenMaterial = this.createStylizedMaterial({
+            color: 0x1d5b2a,
+            roughness: 0.7,
+            metalness: 0.12,
+            emissive: 0x08140a,
+            emissiveIntensity: 0.1,
+            transparent: false,
+            opacity: 1
+        }, surfaceShaderParams);
+
+        this.windowMaterial = this.createStylizedMaterial({
+            color: 0x84d6ff,
+            roughness: 0.15,
+            metalness: 0,
+            emissive: 0x2b6f8a,
+            emissiveIntensity: 0.6,
+            transparent: true,
+            opacity: 0.65
+        }, glassShaderParams);
+
+        this.woodDarkMaterial = this.createStylizedMaterial({
+            color: 0x3a241a,
+            roughness: 0.94,
+            metalness: 0.02,
+            emissive: 0x120a07,
+            emissiveIntensity: 0.08,
+            transparent: false,
+            opacity: 1
+        }, surfaceShaderParams);
+
+    }
+
+    createStylizedMaterial(materialParams, shaderParams) {
+        if (!materialParams || typeof materialParams !== 'object') {
+            throw new Error('createStylizedMaterial requires materialParams.');
+        }
+
+        if (!shaderParams || typeof shaderParams !== 'object') {
+            throw new Error('createStylizedMaterial requires shaderParams.');
+        }
+
+        const {
+            color,
+            roughness,
+            metalness,
+            emissive,
+            emissiveIntensity,
+            transparent,
+            opacity
+        } = materialParams;
+
+        if (!Number.isFinite(color)) {
+            throw new Error('createStylizedMaterial requires a numeric color.');
+        }
+
+        if (!Number.isFinite(roughness)) {
+            throw new Error('createStylizedMaterial requires a numeric roughness.');
+        }
+
+        if (!Number.isFinite(metalness)) {
+            throw new Error('createStylizedMaterial requires a numeric metalness.');
+        }
+
+        if (!Number.isFinite(emissive)) {
+            throw new Error('createStylizedMaterial requires a numeric emissive color.');
+        }
+
+        if (!Number.isFinite(emissiveIntensity)) {
+            throw new Error('createStylizedMaterial requires a numeric emissiveIntensity.');
+        }
+
+        if (typeof transparent !== 'boolean') {
+            throw new Error('createStylizedMaterial requires transparent to be a boolean.');
+        }
+
+        if (!Number.isFinite(opacity)) {
+            throw new Error('createStylizedMaterial requires a numeric opacity.');
+        }
+
+        const material = new THREE.MeshStandardMaterial({
+            color,
+            roughness,
+            metalness,
+            emissive,
+            emissiveIntensity,
+            transparent,
+            opacity
+        });
+
+        material.dithering = true;
+
+        this.applyStylizedShader(material, shaderParams);
+
+        return material;
+    }
+
+    applyStylizedShader(material, shaderParams) {
+        if (!material) {
+            throw new Error('applyStylizedShader requires a material.');
+        }
+
+        if (!shaderParams || typeof shaderParams !== 'object') {
+            throw new Error('applyStylizedShader requires shaderParams.');
+        }
+
+        const {
+            noiseScale,
+            noiseStrength,
+            rimStrength,
+            rimPower,
+            heightGradientStrength,
+            heightGradientScale,
+            heightGradientOffset
+        } = shaderParams;
+
+        if (!Number.isFinite(noiseScale)) {
+            throw new Error('applyStylizedShader requires a numeric noiseScale.');
+        }
+
+        if (!Number.isFinite(noiseStrength)) {
+            throw new Error('applyStylizedShader requires a numeric noiseStrength.');
+        }
+
+        if (!Number.isFinite(rimStrength)) {
+            throw new Error('applyStylizedShader requires a numeric rimStrength.');
+        }
+
+        if (!Number.isFinite(rimPower)) {
+            throw new Error('applyStylizedShader requires a numeric rimPower.');
+        }
+
+        if (!Number.isFinite(heightGradientStrength)) {
+            throw new Error('applyStylizedShader requires a numeric heightGradientStrength.');
+        }
+
+        if (!Number.isFinite(heightGradientScale)) {
+            throw new Error('applyStylizedShader requires a numeric heightGradientScale.');
+        }
+
+        if (!Number.isFinite(heightGradientOffset)) {
+            throw new Error('applyStylizedShader requires a numeric heightGradientOffset.');
+        }
+
+        material.onBeforeCompile = (shader) => {
+            shader.uniforms.uNoiseScale = { value: noiseScale };
+            shader.uniforms.uNoiseStrength = { value: noiseStrength };
+            shader.uniforms.uRimStrength = { value: rimStrength };
+            shader.uniforms.uRimPower = { value: rimPower };
+            shader.uniforms.uHeightGradientStrength = { value: heightGradientStrength };
+            shader.uniforms.uHeightGradientScale = { value: heightGradientScale };
+            shader.uniforms.uHeightGradientOffset = { value: heightGradientOffset };
+
+            shader.vertexShader = `
+                varying vec3 vStylizedWorldPosition;
+            ` + shader.vertexShader;
+
+            shader.vertexShader = shader.vertexShader.replace(
+                '#include <worldpos_vertex>',
+                `#include <worldpos_vertex>
+                vStylizedWorldPosition = (modelMatrix * vec4(transformed, 1.0)).xyz;`
+            );
+
+            shader.fragmentShader = `
+                varying vec3 vStylizedWorldPosition;
+                uniform float uNoiseScale;
+                uniform float uNoiseStrength;
+                uniform float uRimStrength;
+                uniform float uRimPower;
+                uniform float uHeightGradientStrength;
+                uniform float uHeightGradientScale;
+                uniform float uHeightGradientOffset;
+
+                float hashNoise(vec3 p) {
+                    return fract(sin(dot(p, vec3(127.1, 311.7, 74.7))) * 43758.5453123);
+                }
+            ` + shader.fragmentShader;
+
+            shader.fragmentShader = shader.fragmentShader.replace(
+                '#include <dithering_fragment>',
+                `
+                float heightFactor = clamp((vStylizedWorldPosition.y + uHeightGradientOffset) * uHeightGradientScale, 0.0, 1.0);
+                float heightBoost = mix(1.0 - uHeightGradientStrength, 1.0 + uHeightGradientStrength, heightFactor);
+                diffuseColor.rgb *= heightBoost;
+
+                float noise = hashNoise(vStylizedWorldPosition * uNoiseScale);
+                diffuseColor.rgb *= 1.0 + (noise - 0.5) * uNoiseStrength;
+
+                float rim = pow(1.0 - max(dot(normalize(normal), normalize(vViewPosition)), 0.0), uRimPower);
+                diffuseColor.rgb += vec3(rim * uRimStrength);
+
+                #include <dithering_fragment>`
+            );
+        };
+
+        material.needsUpdate = true;
     }
 
     renderChunk(chunk, voxelAt) {

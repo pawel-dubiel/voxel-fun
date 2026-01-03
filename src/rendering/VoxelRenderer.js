@@ -6,11 +6,18 @@ export default class VoxelRenderer {
 
         this.scene = scene;
 
-        this.terrainMaterial = new THREE.MeshLambertMaterial({ color: 0x00ff00 });
+        this.terrainMaterial = new THREE.MeshLambertMaterial({ color: 0x228B22 }); // Forest Green
 
         this.buildingMaterial = new THREE.MeshLambertMaterial({ color: 0x808080 });
         
-        this.castleMaterial = new THREE.MeshLambertMaterial({ color: 0x444444 }); // Dark gray stone
+        this.castleMaterial = new THREE.MeshLambertMaterial({ color: 0x666666 }); // Stone Gray
+        this.woodMaterial = new THREE.MeshLambertMaterial({ color: 0x5d4037 }); // Brown
+        this.plasterMaterial = new THREE.MeshLambertMaterial({ color: 0xe0e0e0 }); // Off-white
+        this.roofMaterial = new THREE.MeshLambertMaterial({ color: 0x303f9f }); // Indigo roof
+        this.roofRedMaterial = new THREE.MeshLambertMaterial({ color: 0xb71c1c }); // Dark Red roof
+        this.roofGreenMaterial = new THREE.MeshLambertMaterial({ color: 0x1b5e20 }); // Dark Green roof
+        this.windowMaterial = new THREE.MeshLambertMaterial({ color: 0x81d4fa, transparent: true, opacity: 0.6 }); // Light Blue Glass
+        this.woodDarkMaterial = new THREE.MeshLambertMaterial({ color: 0x3e2723 }); // Dark Brown
 
     }
 
@@ -39,6 +46,13 @@ export default class VoxelRenderer {
         this.disposeMesh(chunk.terrainMesh);
         this.disposeMesh(chunk.buildingMesh);
         this.disposeMesh(chunk.castleMesh);
+        this.disposeMesh(chunk.woodMesh);
+        this.disposeMesh(chunk.plasterMesh);
+        this.disposeMesh(chunk.roofMesh);
+        this.disposeMesh(chunk.windowMesh);
+        this.disposeMesh(chunk.woodDarkMesh);
+        this.disposeMesh(chunk.roofRedMesh);
+        this.disposeMesh(chunk.roofGreenMesh);
 
         const typePresence = this.getTypePresence(chunk);
 
@@ -49,6 +63,13 @@ export default class VoxelRenderer {
         const castleGeometry = typePresence.hasCastle
             ? this.buildGreedyGeometry(chunk, 3, voxelAt)
             : null;
+        const woodGeometry = typePresence.hasWood ? this.buildGreedyGeometry(chunk, 4, voxelAt) : null;
+        const plasterGeometry = typePresence.hasPlaster ? this.buildGreedyGeometry(chunk, 5, voxelAt) : null;
+        const roofGeometry = typePresence.hasRoof ? this.buildGreedyGeometry(chunk, 6, voxelAt) : null;
+        const windowGeometry = typePresence.hasWindow ? this.buildGreedyGeometry(chunk, 7, voxelAt) : null;
+        const woodDarkGeometry = typePresence.hasWoodDark ? this.buildGreedyGeometry(chunk, 8, voxelAt) : null;
+        const roofRedGeometry = typePresence.hasRoofRed ? this.buildGreedyGeometry(chunk, 9, voxelAt) : null;
+        const roofGreenGeometry = typePresence.hasRoofGreen ? this.buildGreedyGeometry(chunk, 10, voxelAt) : null;
 
         if (terrainGeometry) {
             const terrainMesh = new THREE.Mesh(terrainGeometry, this.terrainMaterial);
@@ -75,6 +96,69 @@ export default class VoxelRenderer {
             chunk.castleMesh = castleMesh;
         } else {
             chunk.castleMesh = null;
+        }
+
+        if (woodGeometry) {
+            const woodMesh = new THREE.Mesh(woodGeometry, this.woodMaterial);
+            woodMesh.position.set(baseX, baseY, baseZ);
+            this.scene.add(woodMesh);
+            chunk.woodMesh = woodMesh;
+        } else {
+            chunk.woodMesh = null;
+        }
+
+        if (plasterGeometry) {
+            const plasterMesh = new THREE.Mesh(plasterGeometry, this.plasterMaterial);
+            plasterMesh.position.set(baseX, baseY, baseZ);
+            this.scene.add(plasterMesh);
+            chunk.plasterMesh = plasterMesh;
+        } else {
+            chunk.plasterMesh = null;
+        }
+
+        if (roofGeometry) {
+            const roofMesh = new THREE.Mesh(roofGeometry, this.roofMaterial);
+            roofMesh.position.set(baseX, baseY, baseZ);
+            this.scene.add(roofMesh);
+            chunk.roofMesh = roofMesh;
+        } else {
+            chunk.roofMesh = null;
+        }
+
+        if (windowGeometry) {
+            const windowMesh = new THREE.Mesh(windowGeometry, this.windowMaterial);
+            windowMesh.position.set(baseX, baseY, baseZ);
+            this.scene.add(windowMesh);
+            chunk.windowMesh = windowMesh;
+        } else {
+            chunk.windowMesh = null;
+        }
+
+        if (woodDarkGeometry) {
+            const woodDarkMesh = new THREE.Mesh(woodDarkGeometry, this.woodDarkMaterial);
+            woodDarkMesh.position.set(baseX, baseY, baseZ);
+            this.scene.add(woodDarkMesh);
+            chunk.woodDarkMesh = woodDarkMesh;
+        } else {
+            chunk.woodDarkMesh = null;
+        }
+
+        if (roofRedGeometry) {
+            const roofRedMesh = new THREE.Mesh(roofRedGeometry, this.roofRedMaterial);
+            roofRedMesh.position.set(baseX, baseY, baseZ);
+            this.scene.add(roofRedMesh);
+            chunk.roofRedMesh = roofRedMesh;
+        } else {
+            chunk.roofRedMesh = null;
+        }
+
+        if (roofGreenGeometry) {
+            const roofGreenMesh = new THREE.Mesh(roofGreenGeometry, this.roofGreenMaterial);
+            roofGreenMesh.position.set(baseX, baseY, baseZ);
+            this.scene.add(roofGreenMesh);
+            chunk.roofGreenMesh = roofGreenMesh;
+        } else {
+            chunk.roofGreenMesh = null;
         }
     }
 
@@ -267,8 +351,17 @@ export default class VoxelRenderer {
 
         const size = chunk.size;
         const count = size * size * size;
-        let hasBuilding = false;
-        let hasCastle = false;
+        const presence = {
+            hasBuilding: false,
+            hasCastle: false,
+            hasWood: false,
+            hasPlaster: false,
+            hasRoof: false,
+            hasWindow: false,
+            hasWoodDark: false,
+            hasRoofRed: false,
+            hasRoofGreen: false
+        };
 
         for (let idx = 0; idx < count; idx++) {
             const value = chunk.voxels[idx];
@@ -276,16 +369,18 @@ export default class VoxelRenderer {
                 throw new Error('chunk.voxels must contain numeric voxel types.');
             }
 
-            if (value === 2) {
-                hasBuilding = true;
-                if (hasCastle) break;
-            } else if (value === 3) {
-                hasCastle = true;
-                if (hasBuilding) break;
-            }
+            if (value === 2) presence.hasBuilding = true;
+            else if (value === 3) presence.hasCastle = true;
+            else if (value === 4) presence.hasWood = true;
+            else if (value === 5) presence.hasPlaster = true;
+            else if (value === 6) presence.hasRoof = true;
+            else if (value === 7) presence.hasWindow = true;
+            else if (value === 8) presence.hasWoodDark = true;
+            else if (value === 9) presence.hasRoofRed = true;
+            else if (value === 10) presence.hasRoofGreen = true;
         }
 
-        return { hasBuilding, hasCastle };
+        return presence;
     }
 
     disposeMesh(mesh) {
@@ -302,9 +397,24 @@ export default class VoxelRenderer {
         this.disposeMesh(chunk.terrainMesh);
         this.disposeMesh(chunk.buildingMesh);
         this.disposeMesh(chunk.castleMesh);
+        this.disposeMesh(chunk.woodMesh);
+        this.disposeMesh(chunk.plasterMesh);
+        this.disposeMesh(chunk.roofMesh);
+        this.disposeMesh(chunk.windowMesh);
+        this.disposeMesh(chunk.woodDarkMesh);
+        this.disposeMesh(chunk.roofRedMesh);
+        this.disposeMesh(chunk.roofGreenMesh);
+        
         chunk.terrainMesh = null;
         chunk.buildingMesh = null;
         chunk.castleMesh = null;
+        chunk.woodMesh = null;
+        chunk.plasterMesh = null;
+        chunk.roofMesh = null;
+        chunk.windowMesh = null;
+        chunk.woodDarkMesh = null;
+        chunk.roofRedMesh = null;
+        chunk.roofGreenMesh = null;
     }
 
 }

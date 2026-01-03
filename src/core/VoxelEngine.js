@@ -197,8 +197,8 @@ export default class VoxelEngine {
                         // Only remove solid blocks
                         if (voxelType > 0) {
                             if (voxelType === 1) terrainDestroyed++;
-                            else if (voxelType === 2) buildingDestroyed++;
                             else if (voxelType === 3) castleDestroyed++;
+                            else buildingDestroyed++; // Types 2, 4, 5, 6, 7, 8 are all "building" components
 
                             const chunk = this.setVoxel(worldX, worldY, worldZ, 0);
                             if (chunk) affectedChunks.add(chunk);
@@ -210,13 +210,13 @@ export default class VoxelEngine {
 
         // Spawn debris based on what was destroyed
         if (terrainDestroyed > 0) {
-            this.debrisSystem.spawn(position, terrainDestroyed, 0x00ff00);
+            this.debrisSystem.spawn(position, terrainDestroyed, 0x228B22);
         }
         if (buildingDestroyed > 0) {
             this.debrisSystem.spawn(position, buildingDestroyed, 0x808080);
         }
         if (castleDestroyed > 0) {
-            this.debrisSystem.spawn(position, castleDestroyed, 0x444444);
+            this.debrisSystem.spawn(position, castleDestroyed, 0x666666);
         }
 
         this.queueCollapse(affectedChunks);
@@ -340,7 +340,7 @@ export default class VoxelEngine {
                         const idx = i * size * size + j * size + k;
                         const voxelType = chunk.voxels[idx];
 
-                        if (voxelType !== 2 && voxelType !== 3) {
+                        if (voxelType < 2) { // 0 is empty, 1 is terrain (doesn't collapse)
                             continue;
                         }
 
@@ -512,7 +512,14 @@ export default class VoxelEngine {
 
                     impactPosition.set(impact.x, impact.y, impact.z);
 
-                    const color = impact.voxelType === 3 ? 0x444444 : 0x808080;
+                    let color = 0x808080;
+                    if (impact.voxelType === 1) color = 0x228B22;
+                    else if (impact.voxelType === 3) color = 0x666666;
+                    else if (impact.voxelType === 4 || impact.voxelType === 8) color = 0x5d4037;
+                    else if (impact.voxelType === 6) color = 0x303f9f;
+                    else if (impact.voxelType === 9) color = 0xb71c1c;
+                    else if (impact.voxelType === 10) color = 0x1b5e20;
+
                     this.debrisSystem.spawnImpact(impactPosition, count, color);
                     impactBudget -= 1;
                 }
@@ -673,6 +680,7 @@ export default class VoxelEngine {
             if (!activeKeys.has(key)) {
                 this.voxelRenderer.disposeChunk(chunk);
                 this.chunks.delete(key);
+                this.pendingCollapseChunks.delete(chunk);
                 this.addNeighborChunksByCoords(chunk.x, chunk.y, chunk.z, chunksToRender);
             }
         }

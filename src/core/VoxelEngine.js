@@ -42,6 +42,11 @@ export default class VoxelEngine {
 
         this.animate = this.animate.bind(this);
 
+        this.pendingCollapseChunks = new Set();
+        this.collapseAccumulator = 0;
+        this.collapseInterval = 1 / 30;
+        this.collapseMaxStepsPerFrame = 2;
+
         // Enemy helicopters
 
         this.enemies = [];
@@ -185,8 +190,222 @@ export default class VoxelEngine {
             this.debrisSystem.spawn(position, castleDestroyed, 0x444444);
         }
 
+        this.queueCollapse(affectedChunks);
+
         // Re-render affected chunks
         for (const chunk of affectedChunks) {
+            this.voxelRenderer.renderChunk(chunk);
+        }
+    }
+
+    queueCollapse(affectedChunks) {
+        if (!(affectedChunks instanceof Set)) {
+            throw new Error('queueCollapse requires a Set of chunks.');
+        }
+
+        if (affectedChunks.size === 0) return;
+
+        const chunksToCheck = new Set();
+        const neighborRadius = 1;
+
+        const addChunkIfValid = (chunk) => {
+            if (!chunk) return;
+
+            if (!Number.isFinite(chunk.x) || !Number.isFinite(chunk.y) || !Number.isFinite(chunk.z)) {
+                throw new Error('queueCollapse requires chunks with numeric coordinates.');
+            }
+
+            if (!Number.isFinite(chunk.size) || chunk.size !== this.chunkSize) {
+                throw new Error('queueCollapse requires chunks with the expected size.');
+            }
+
+            chunksToCheck.add(chunk);
+        };
+
+        const addChunkColumn = (startChunk) => {
+            if (!startChunk) return;
+
+            let cursor = startChunk;
+            while (cursor) {
+                addChunkIfValid(cursor);
+                const aboveKey = this.getChunkKey(cursor.x, cursor.y + 1, cursor.z);
+                cursor = this.chunks.get(aboveKey);
+            }
+
+            cursor = startChunk;
+            while (cursor) {
+                const belowKey = this.getChunkKey(cursor.x, cursor.y - 1, cursor.z);
+                cursor = this.chunks.get(belowKey);
+                if (cursor) addChunkIfValid(cursor);
+            }
+        };
+
+        for (const chunk of affectedChunks) {
+            if (!chunk || !Number.isFinite(chunk.x) || !Number.isFinite(chunk.y) || !Number.isFinite(chunk.z)) {
+                throw new Error('queueCollapse requires chunks with numeric coordinates.');
+            }
+
+            if (!Number.isFinite(chunk.size) || chunk.size !== this.chunkSize) {
+                throw new Error('queueCollapse requires chunks with the expected size.');
+            }
+
+            for (let dx = -neighborRadius; dx <= neighborRadius; dx++) {
+                for (let dy = -neighborRadius; dy <= neighborRadius; dy++) {
+                    for (let dz = -neighborRadius; dz <= neighborRadius; dz++) {
+                        const key = this.getChunkKey(chunk.x + dx, chunk.y + dy, chunk.z + dz);
+                        const neighbor = this.chunks.get(key);
+                        if (neighbor) addChunkColumn(neighbor);
+                    }
+                }
+            }
+        }
+
+        if (chunksToCheck.size === 0) return;
+
+        for (const chunk of chunksToCheck) {
+            this.pendingCollapseChunks.add(chunk);
+        }
+    }
+
+    performCollapseStep(chunksToCheck) {
+        if (!(chunksToCheck instanceof Set)) {
+            throw new Error('performCollapseStep requires a Set of chunks.');
+        }
+
+        if (chunksToCheck.size === 0) {
+            return { moved: false, changedChunks: new Set() };
+        }
+
+        const chunkList = Array.from(chunksToCheck);
+        chunkList.sort((a, b) => b.y - a.y);
+
+        const moves = [];
+        const changedChunks = new Set();
+        let moved = false;
+
+        for (const chunk of chunkList) {
+            if (!chunk || !Number.isFinite(chunk.x) || !Number.isFinite(chunk.y) || !Number.isFinite(chunk.z)) {
+                throw new Error('performCollapseStep requires chunks with numeric coordinates.');
+            }
+
+            if (!Number.isFinite(chunk.size) || chunk.size !== this.chunkSize) {
+                throw new Error('performCollapseStep requires chunks with the expected size.');
+            }
+
+            const key = this.getChunkKey(chunk.x, chunk.y, chunk.z);
+            if (this.chunks.get(key) !== chunk) {
+                throw new Error('performCollapseStep requires chunks to be loaded.');
+            }
+
+            const size = chunk.size;
+            const baseY = chunk.y * size;
+
+            for (let j = size - 1; j >= 0; j--) {
+                for (let i = 0; i < size; i++) {
+                    for (let k = 0; k < size; k++) {
+                        const idx = i * size * size + j * size + k;
+                        const voxelType = chunk.voxels[idx];
+
+                        if (voxelType !== 2 && voxelType !== 3) {
+                            continue;
+                        }
+
+                        const worldY = baseY + j;
+
+                        if (worldY < 0) {
+                            throw new Error('performCollapseStep does not support building or castle voxels below world Y 0.');
+                        }
+
+                        if (worldY === 0) {
+                            continue;
+                        }
+
+                        let belowChunk = chunk;
+                        let belowIndex = idx - size;
+
+                        if (j === 0) {
+                            const belowKey = this.getChunkKey(chunk.x, chunk.y - 1, chunk.z);
+                            belowChunk = this.chunks.get(belowKey);
+
+                            if (!belowChunk) {
+                                throw new Error('performCollapseStep requires the chunk below to be loaded.');
+                            }
+
+                            if (!Number.isFinite(belowChunk.size) || belowChunk.size !== size) {
+                                throw new Error('performCollapseStep requires matching chunk sizes across boundaries.');
+                            }
+
+                            belowIndex = i * size * size + (size - 1) * size + k;
+                        }
+
+                        if (belowChunk.voxels[belowIndex] === 0) {
+                            moves.push({
+                                fromChunk: chunk,
+                                fromIndex: idx,
+                                toChunk: belowChunk,
+                                toIndex: belowIndex,
+                                voxelType
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        for (const move of moves) {
+            if (move.toChunk.voxels[move.toIndex] !== 0) {
+                throw new Error('performCollapseStep planned a move into a filled voxel.');
+            }
+
+            move.toChunk.voxels[move.toIndex] = move.voxelType;
+            move.fromChunk.voxels[move.fromIndex] = 0;
+            changedChunks.add(move.fromChunk);
+            changedChunks.add(move.toChunk);
+            moved = true;
+        }
+
+        return { moved, changedChunks };
+    }
+
+    processCollapse(deltaTime) {
+        if (!Number.isFinite(deltaTime)) {
+            throw new Error('processCollapse requires a numeric deltaTime.');
+        }
+
+        if (this.pendingCollapseChunks.size === 0) return;
+
+        if (!Number.isFinite(this.collapseInterval) || this.collapseInterval <= 0) {
+            throw new Error('processCollapse requires a positive collapseInterval.');
+        }
+
+        if (!Number.isFinite(this.collapseMaxStepsPerFrame) || this.collapseMaxStepsPerFrame < 1) {
+            throw new Error('processCollapse requires collapseMaxStepsPerFrame >= 1.');
+        }
+
+        this.collapseAccumulator += deltaTime;
+        if (this.collapseAccumulator < this.collapseInterval) return;
+
+        const rawSteps = Math.floor(this.collapseAccumulator / this.collapseInterval);
+        const steps = Math.min(rawSteps, this.collapseMaxStepsPerFrame);
+
+        this.collapseAccumulator -= steps * this.collapseInterval;
+
+        const chunksToRender = new Set();
+
+        for (let step = 0; step < steps; step++) {
+            const { moved, changedChunks } = this.performCollapseStep(this.pendingCollapseChunks);
+
+            for (const chunk of changedChunks) {
+                chunksToRender.add(chunk);
+            }
+
+            if (!moved) {
+                this.pendingCollapseChunks.clear();
+                break;
+            }
+        }
+
+        for (const chunk of chunksToRender) {
             this.voxelRenderer.renderChunk(chunk);
         }
     }
@@ -276,6 +495,8 @@ export default class VoxelEngine {
         // Check collisions
 
         this.checkCollisions();
+
+        this.processCollapse(deltaTime);
 
         // Update HUD
 

@@ -76,10 +76,16 @@ export default class VoxelEngine {
         this.cohorts = [];
         
         for (let c = 0; c < 10; c++) {
+            const formationSpacing = 30;
+            const formationJitter = 8;
+            const row = Math.floor(c / 5);
+            const col = c % 5;
+            const baseX = (col - 2) * formationSpacing;
+            const baseZ = -40 - row * formationSpacing;
             const cohortCenter = new THREE.Vector3(
-                (Math.random() - 0.5) * 400,
+                baseX + (Math.random() - 0.5) * formationJitter,
                 0,
-                (Math.random() - 0.5) * 400
+                baseZ + (Math.random() - 0.5) * formationJitter
             );
             const cohortDir = Math.random() * Math.PI * 2;
             const cohortObj = { center: cohortCenter, direction: cohortDir };

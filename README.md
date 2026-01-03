@@ -2,6 +2,9 @@
 
 A retro-style, high-performance voxel flight simulator built with Three.js. Pilot an Apache helicopter through a procedurally generated world, engage enemy aircraft, and rain destruction upon ancient Roman cohorts and medieval fortresses.
 
+
+![Gameplay](gameplay.gif)
+
 ## Features
 
 - **Retro Aesthetic:** Pixelated 320x240 rendering scaled for a classic DOS-era look.

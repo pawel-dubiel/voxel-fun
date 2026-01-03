@@ -14,12 +14,13 @@ export default class SceneManager {
 
         this.scene = new THREE.Scene();
 
-        const viewport = this.getViewportSize();
+        this.renderWidth = 320;
+        this.renderHeight = 240;
 
-        this.camera = new THREE.PerspectiveCamera(60, viewport.width / viewport.height, 0.1, 1000);
+        this.camera = new THREE.PerspectiveCamera(60, this.renderWidth / this.renderHeight, 0.1, 1000);
 
         this.renderer = new THREE.WebGLRenderer({
-            antialias: true,
+            antialias: false,
             powerPreference: 'high-performance'
         });
 
@@ -28,25 +29,26 @@ export default class SceneManager {
         this.renderer.toneMappingExposure = 1.1;
         this.renderer.useLegacyLights = false;
 
-        this.renderer.setSize(viewport.width, viewport.height, false);
-
-        const pixelRatio = this.getPixelRatio();
-        this.renderer.setPixelRatio(Math.min(pixelRatio, 2));
+        this.renderer.setPixelRatio(1);
+        this.renderer.setSize(this.renderWidth, this.renderHeight, false);
 
         const canvas = this.renderer.domElement;
-        canvas.style.width = '100%';
-        canvas.style.height = '100%';
+        canvas.style.imageRendering = 'pixelated';
+        canvas.style.width = `${this.renderWidth}px`;
+        canvas.style.height = `${this.renderHeight}px`;
         canvas.style.position = 'absolute';
-        canvas.style.left = '0';
-        canvas.style.top = '0';
+        canvas.style.left = '50%';
+        canvas.style.top = '50%';
+        canvas.style.transform = 'translate(-50%, -50%)';
         canvas.style.display = 'block';
 
         document.body.appendChild(canvas);
 
+        this.applyScale();
         this.createLighting();
         this.createSky();
 
-        this.scene.fog = new THREE.Fog(0xf5c7a6, 90, 240);
+        this.scene.fog = new THREE.FogExp2(0xf0b09a, 0.018);
 
         this.handleResize = this.handleResize.bind(this);
         window.addEventListener('resize', this.handleResize);
@@ -64,25 +66,24 @@ export default class SceneManager {
         return { width, height };
     }
 
-    getPixelRatio() {
-        const ratio = window.devicePixelRatio;
-
-        if (!Number.isFinite(ratio) || ratio <= 0) {
-            throw new Error('SceneManager requires a valid devicePixelRatio.');
-        }
-
-        return ratio;
+    handleResize() {
+        this.applyScale();
     }
 
-    handleResize() {
+    applyScale() {
         const viewport = this.getViewportSize();
-        const pixelRatio = this.getPixelRatio();
+        const rawScale = Math.min(viewport.width / this.renderWidth, viewport.height / this.renderHeight);
 
-        this.camera.aspect = viewport.width / viewport.height;
-        this.camera.updateProjectionMatrix();
+        if (!Number.isFinite(rawScale) || rawScale <= 0) {
+            throw new Error('SceneManager requires a valid scale.');
+        }
 
-        this.renderer.setSize(viewport.width, viewport.height, false);
-        this.renderer.setPixelRatio(Math.min(pixelRatio, 2));
+        const integerScale = Math.floor(rawScale);
+        const scale = integerScale >= 1 ? integerScale : rawScale;
+
+        const canvas = this.renderer.domElement;
+        canvas.style.width = `${this.renderWidth * scale}px`;
+        canvas.style.height = `${this.renderHeight * scale}px`;
     }
 
     createLighting() {
@@ -101,8 +102,8 @@ export default class SceneManager {
     }
 
     createSky() {
-        const topColor = new THREE.Color(0x6aa8ff);
-        const bottomColor = new THREE.Color(0xf5c7a6);
+        const topColor = new THREE.Color(0x5b77d1);
+        const bottomColor = new THREE.Color(0xf2b18c);
 
         const skyGeometry = new THREE.SphereGeometry(600, 32, 16);
         const skyMaterial = new THREE.ShaderMaterial({

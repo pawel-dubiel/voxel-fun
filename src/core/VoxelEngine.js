@@ -36,7 +36,7 @@ export default class VoxelEngine {
 
         this.chunkSize = 32;
 
-        this.renderDistance = 3;
+        this.renderDistance = 4;
 
         this.lastTime = 0;
 
@@ -51,10 +51,10 @@ export default class VoxelEngine {
         this.collapseImpactBudgetPerStep = 60;
         this.chunkMeshQueue = [];
         this.chunkMeshQueueSet = new Set();
-        this.maxChunkMeshesPerFrame = 2;
+        this.maxChunkMeshesPerFrame = 6;
         this.chunkGenerationQueue = [];
         this.chunkGenerationQueueSet = new Set();
-        this.maxChunkGenerationsPerFrame = 2;
+        this.maxChunkGenerationsPerFrame = 6;
         this.activeChunkKeys = new Set();
 
         // Enemy helicopters

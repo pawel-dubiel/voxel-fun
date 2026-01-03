@@ -38,21 +38,51 @@ export default class FlightControls {
 
         this.maxSpeed = 25; // Speed cap
 
+        this.mouseNDC = new THREE.Vector2();
+        this.hasMousePosition = false;
+
         window.addEventListener('keydown', (e) => this.keys[e.code] = true);
 
         window.addEventListener('keyup', (e) => this.keys[e.code] = false);
 
-        window.addEventListener('mousedown', () => this.shoot());
+        window.addEventListener('mousemove', (event) => this.updateMousePosition(event));
+
+        window.addEventListener('mousedown', (event) => this.shoot(event));
 
     }
 
-    shoot() {
+    updateMousePosition(event) {
+        if (!event || !Number.isFinite(event.clientX) || !Number.isFinite(event.clientY)) {
+            throw new Error('updateMousePosition requires a mouse event with clientX and clientY.');
+        }
+
+        if (!Number.isFinite(window.innerWidth) || !Number.isFinite(window.innerHeight) || window.innerWidth <= 0 || window.innerHeight <= 0) {
+            throw new Error('updateMousePosition requires a valid window size.');
+        }
+
+        this.mouseNDC.x = (event.clientX / window.innerWidth) * 2 - 1;
+        this.mouseNDC.y = -(event.clientY / window.innerHeight) * 2 + 1;
+        this.hasMousePosition = true;
+    }
+
+    shoot(event) {
 
         if (this.shootCallback) {
+            if (event) {
+                this.updateMousePosition(event);
+            }
 
-            const direction = new THREE.Vector3(0, 0, -1);
+            if (!this.hasMousePosition) {
+                throw new Error('shoot requires a mouse position before firing.');
+            }
 
-            direction.applyEuler(this.rotation);
+            const target = new THREE.Vector3(this.mouseNDC.x, this.mouseNDC.y, 0.5);
+            target.unproject(this.camera);
+            const direction = target.sub(this.camera.position).normalize();
+
+            if (!Number.isFinite(direction.x) || !Number.isFinite(direction.y) || !Number.isFinite(direction.z)) {
+                throw new Error('shoot computed an invalid direction vector.');
+            }
 
             this.shootCallback(this.position.clone(), direction);
 

@@ -49,6 +49,13 @@ export default class VoxelEngine {
         this.collapseImpactCountBuilding = 2;
         this.collapseImpactCountCastle = 3;
         this.collapseImpactBudgetPerStep = 60;
+        this.chunkMeshQueue = [];
+        this.chunkMeshQueueSet = new Set();
+        this.maxChunkMeshesPerFrame = 2;
+        this.chunkGenerationQueue = [];
+        this.chunkGenerationQueueSet = new Set();
+        this.maxChunkGenerationsPerFrame = 2;
+        this.activeChunkKeys = new Set();
 
         // Enemy helicopters
 
@@ -99,6 +106,15 @@ export default class VoxelEngine {
         this.altitudeEl = document.getElementById('altitude');
 
         this.speedEl = document.getElementById('speed');
+
+        this.fpsEl = document.getElementById('fps');
+
+        if (!this.altitudeEl || !this.speedEl || !this.fpsEl) {
+            throw new Error('HUD elements are missing from the DOM.');
+        }
+
+        this.fpsSampleTime = 0;
+        this.fpsFrameCount = 0;
 
         this.animate(0);
 
@@ -594,7 +610,13 @@ export default class VoxelEngine {
 
         this.speedEl.textContent = speed;
 
+        this.updateFps(deltaTime);
+
         this.updateChunks();
+
+        this.processChunkGenerationQueue();
+
+        this.processChunkMeshQueue();
 
         this.sceneManager.render();
 
@@ -631,8 +653,211 @@ export default class VoxelEngine {
             if (!activeKeys.has(key)) {
                 this.voxelRenderer.disposeChunk(chunk);
                 this.chunks.delete(key);
+                this.addNeighborChunksByCoords(chunk.x, chunk.y, chunk.z, chunksToRender);
             }
+        }
+
+        for (const chunk of chunksToRender) {
+            this.queueChunkMesh(chunk);
+        }
+
+        this.activeChunkKeys = activeKeys;
+    }
+
+    updateFps(deltaTime) {
+        if (!Number.isFinite(deltaTime)) {
+            throw new Error('updateFps requires a numeric deltaTime.');
+        }
+
+        this.fpsSampleTime += deltaTime;
+        this.fpsFrameCount += 1;
+
+        const updateInterval = 0.25;
+        if (this.fpsSampleTime >= updateInterval) {
+            const fps = this.fpsFrameCount / this.fpsSampleTime;
+            this.fpsEl.textContent = Math.round(fps);
+            this.fpsSampleTime = 0;
+            this.fpsFrameCount = 0;
         }
     }
 
+    queueChunkMesh(chunk) {
+        if (!chunk) {
+            throw new Error('queueChunkMesh requires a chunk.');
+        }
+
+        if (!Number.isFinite(chunk.x) || !Number.isFinite(chunk.y) || !Number.isFinite(chunk.z)) {
+            throw new Error('queueChunkMesh requires a chunk with numeric coordinates.');
+        }
+
+        const key = this.getChunkKey(chunk.x, chunk.y, chunk.z);
+        if (this.chunks.get(key) !== chunk) {
+            return;
+        }
+
+        if (this.chunkMeshQueueSet.has(key)) {
+            return;
+        }
+
+        this.chunkMeshQueueSet.add(key);
+        this.chunkMeshQueue.push(chunk);
+    }
+
+    processChunkMeshQueue() {
+        if (!Number.isFinite(this.maxChunkMeshesPerFrame) || this.maxChunkMeshesPerFrame < 1) {
+            throw new Error('processChunkMeshQueue requires maxChunkMeshesPerFrame >= 1.');
+        }
+
+        if (this.chunkMeshQueue.length === 0) return;
+
+        let processed = 0;
+
+        while (processed < this.maxChunkMeshesPerFrame && this.chunkMeshQueue.length > 0) {
+            const chunk = this.chunkMeshQueue.shift();
+            if (!chunk) {
+                throw new Error('processChunkMeshQueue encountered a missing chunk.');
+            }
+
+            if (!Number.isFinite(chunk.x) || !Number.isFinite(chunk.y) || !Number.isFinite(chunk.z)) {
+                throw new Error('processChunkMeshQueue requires chunks with numeric coordinates.');
+            }
+
+            const key = this.getChunkKey(chunk.x, chunk.y, chunk.z);
+            this.chunkMeshQueueSet.delete(key);
+
+            if (this.chunks.get(key) !== chunk) {
+                continue;
+            }
+
+            this.voxelRenderer.renderChunk(chunk, this.getVoxel.bind(this));
+            processed += 1;
+        }
+    }
+
+    queueChunkGeneration(x, y, z) {
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+            throw new Error('queueChunkGeneration requires numeric chunk coordinates.');
+        }
+
+        const key = this.getChunkKey(x, y, z);
+        if (this.chunks.has(key)) {
+            return;
+        }
+
+        if (this.chunkGenerationQueueSet.has(key)) {
+            return;
+        }
+
+        this.chunkGenerationQueueSet.add(key);
+        this.chunkGenerationQueue.push({ x, y, z, key });
+    }
+
+    processChunkGenerationQueue() {
+        if (!Number.isFinite(this.maxChunkGenerationsPerFrame) || this.maxChunkGenerationsPerFrame < 1) {
+            throw new Error('processChunkGenerationQueue requires maxChunkGenerationsPerFrame >= 1.');
+        }
+
+        if (!(this.activeChunkKeys instanceof Set)) {
+            throw new Error('processChunkGenerationQueue requires activeChunkKeys to be a Set.');
+        }
+
+        if (this.chunkGenerationQueue.length === 0) return;
+
+        let processed = 0;
+        const chunksToRender = new Set();
+
+        while (processed < this.maxChunkGenerationsPerFrame && this.chunkGenerationQueue.length > 0) {
+            const entry = this.chunkGenerationQueue.shift();
+            if (!entry) {
+                throw new Error('processChunkGenerationQueue encountered a missing entry.');
+            }
+
+            if (!Number.isFinite(entry.x) || !Number.isFinite(entry.y) || !Number.isFinite(entry.z)) {
+                throw new Error('processChunkGenerationQueue requires numeric entry coordinates.');
+            }
+
+            const key = entry.key || this.getChunkKey(entry.x, entry.y, entry.z);
+            this.chunkGenerationQueueSet.delete(key);
+
+            if (!this.activeChunkKeys.has(key)) {
+                continue;
+            }
+
+            if (this.chunks.has(key)) {
+                continue;
+            }
+
+            const voxels = this.terrainGenerator.generateChunk(entry.x, entry.y, entry.z, this.chunkSize);
+            const chunk = new Chunk(entry.x, entry.y, entry.z, voxels, this.chunkSize);
+            this.chunks.set(key, chunk);
+            this.addNeighborChunksToSet(chunk, chunksToRender, true);
+            processed += 1;
+        }
+
+        for (const chunk of chunksToRender) {
+            this.queueChunkMesh(chunk);
+        }
+    }
+
+    addNeighborChunksToSet(chunk, targetSet, includeSelf) {
+        if (!chunk) {
+            throw new Error('addNeighborChunksToSet requires a chunk.');
+        }
+
+        if (!(targetSet instanceof Set)) {
+            throw new Error('addNeighborChunksToSet requires a Set.');
+        }
+
+        if (typeof includeSelf !== 'boolean') {
+            throw new Error('addNeighborChunksToSet requires a boolean includeSelf.');
+        }
+
+        if (!Number.isFinite(chunk.x) || !Number.isFinite(chunk.y) || !Number.isFinite(chunk.z)) {
+            throw new Error('addNeighborChunksToSet requires a chunk with numeric coordinates.');
+        }
+
+        if (includeSelf) {
+            targetSet.add(chunk);
+        }
+
+        const offsets = [
+            [1, 0, 0],
+            [-1, 0, 0],
+            [0, 1, 0],
+            [0, -1, 0],
+            [0, 0, 1],
+            [0, 0, -1]
+        ];
+
+        for (const offset of offsets) {
+            const key = this.getChunkKey(chunk.x + offset[0], chunk.y + offset[1], chunk.z + offset[2]);
+            const neighbor = this.chunks.get(key);
+            if (neighbor) targetSet.add(neighbor);
+        }
+    }
+
+    addNeighborChunksByCoords(x, y, z, targetSet) {
+        if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+            throw new Error('addNeighborChunksByCoords requires numeric coordinates.');
+        }
+
+        if (!(targetSet instanceof Set)) {
+            throw new Error('addNeighborChunksByCoords requires a Set.');
+        }
+
+        const offsets = [
+            [1, 0, 0],
+            [-1, 0, 0],
+            [0, 1, 0],
+            [0, -1, 0],
+            [0, 0, 1],
+            [0, 0, -1]
+        ];
+
+        for (const offset of offsets) {
+            const key = this.getChunkKey(x + offset[0], y + offset[1], z + offset[2]);
+            const neighbor = this.chunks.get(key);
+            if (neighbor) targetSet.add(neighbor);
+        }
+    }
 }

@@ -1,4 +1,4 @@
-# Apache Voxel Engine
+# Voxel Engine Demo
 
 A retro-style, high-performance voxel arcade shooter built with Three.js. Pilot an airplane through a procedurally generated world, engage enemy aircraft, and rain destruction upon soldiers and buildings.
 

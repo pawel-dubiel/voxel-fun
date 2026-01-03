@@ -175,4 +175,38 @@ export default class BuildingGenerator {
         // Interior (empty)
         return 0;
     }
+
+    static getTowerVoxelAt(lx, ly, lz, width, height, depth, seed) {
+        const centerX = (width - 1) / 2;
+        const centerZ = (depth - 1) / 2;
+        const dx = lx - centerX;
+        const dz = lz - centerZ;
+        const radius = Math.min(width, depth) / 2;
+        const distSq = dx * dx + dz * dz;
+        const outerRadiusSq = radius * radius;
+
+        if (distSq > outerRadiusSq) return 0;
+
+        const innerRadius = Math.max(radius - 1, 0);
+        const innerRadiusSq = innerRadius * innerRadius;
+        const isWall = innerRadius === 0 || distSq >= innerRadiusSq;
+
+        if (ly === 0) return this.VOXEL_STONE;
+
+        if (ly >= height - 2) {
+            if (!isWall) return 0;
+            const crenel = (lx + lz + seed) % 2 === 0;
+            return crenel ? this.VOXEL_STONE : 0;
+        }
+
+        if (isWall) {
+            const windowBand = 3 + (seed % 3);
+            const isEdge = lx === 0 || lx === width - 1 || lz === 0 || lz === depth - 1;
+            const hasSlit = isEdge && (ly % windowBand === 1) && ((lx + lz + seed) % 3 === 0);
+            if (hasSlit) return this.VOXEL_WINDOW;
+            return this.VOXEL_STONE;
+        }
+
+        return 0;
+    }
 }

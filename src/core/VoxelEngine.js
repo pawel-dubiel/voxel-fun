@@ -46,6 +46,9 @@ export default class VoxelEngine {
         this.collapseAccumulator = 0;
         this.collapseInterval = 1 / 30;
         this.collapseMaxStepsPerFrame = 2;
+        this.collapseImpactCountBuilding = 2;
+        this.collapseImpactCountCastle = 3;
+        this.collapseImpactBudgetPerStep = 60;
 
         // Enemy helicopters
 
@@ -352,6 +355,15 @@ export default class VoxelEngine {
             }
         }
 
+        const movedDestinations = new Set();
+
+        for (const move of moves) {
+            const destKey = `${move.toChunk.x},${move.toChunk.y},${move.toChunk.z}:${move.toIndex}`;
+            movedDestinations.add(destKey);
+        }
+
+        const impactEvents = [];
+
         for (const move of moves) {
             if (move.toChunk.voxels[move.toIndex] !== 0) {
                 throw new Error('performCollapseStep planned a move into a filled voxel.');
@@ -362,9 +374,53 @@ export default class VoxelEngine {
             changedChunks.add(move.fromChunk);
             changedChunks.add(move.toChunk);
             moved = true;
+
+            const size = move.toChunk.size;
+            const sizeSq = size * size;
+            const i = Math.floor(move.toIndex / sizeSq);
+            const rem = move.toIndex - i * sizeSq;
+            const j = Math.floor(rem / size);
+            const k = rem - j * size;
+
+            const worldY = move.toChunk.y * size + j;
+            const worldX = move.toChunk.x * size + i;
+            const worldZ = move.toChunk.z * size + k;
+
+            let landed = false;
+
+            if (worldY === 0) {
+                landed = true;
+            } else {
+                let belowChunk = move.toChunk;
+                let belowIndex = move.toIndex - size;
+
+                if (j === 0) {
+                    const belowKey = this.getChunkKey(move.toChunk.x, move.toChunk.y - 1, move.toChunk.z);
+                    belowChunk = this.chunks.get(belowKey);
+
+                    if (!belowChunk) {
+                        throw new Error('performCollapseStep requires the chunk below to be loaded for landing checks.');
+                    }
+
+                    if (!Number.isFinite(belowChunk.size) || belowChunk.size !== size) {
+                        throw new Error('performCollapseStep requires matching chunk sizes for landing checks.');
+                    }
+
+                    belowIndex = i * sizeSq + (size - 1) * size + k;
+                }
+
+                const belowKey = `${belowChunk.x},${belowChunk.y},${belowChunk.z}:${belowIndex}`;
+                if (belowChunk.voxels[belowIndex] > 0 && !movedDestinations.has(belowKey)) {
+                    landed = true;
+                }
+            }
+
+            if (landed) {
+                impactEvents.push({ x: worldX, y: worldY, z: worldZ, voxelType: move.voxelType });
+            }
         }
 
-        return { moved, changedChunks };
+        return { moved, changedChunks, impactEvents };
     }
 
     processCollapse(deltaTime) {
@@ -382,6 +438,18 @@ export default class VoxelEngine {
             throw new Error('processCollapse requires collapseMaxStepsPerFrame >= 1.');
         }
 
+        if (!Number.isFinite(this.collapseImpactCountBuilding) || this.collapseImpactCountBuilding <= 0) {
+            throw new Error('processCollapse requires collapseImpactCountBuilding > 0.');
+        }
+
+        if (!Number.isFinite(this.collapseImpactCountCastle) || this.collapseImpactCountCastle <= 0) {
+            throw new Error('processCollapse requires collapseImpactCountCastle > 0.');
+        }
+
+        if (!Number.isFinite(this.collapseImpactBudgetPerStep) || this.collapseImpactBudgetPerStep < 0) {
+            throw new Error('processCollapse requires collapseImpactBudgetPerStep >= 0.');
+        }
+
         this.collapseAccumulator += deltaTime;
         if (this.collapseAccumulator < this.collapseInterval) return;
 
@@ -391,12 +459,30 @@ export default class VoxelEngine {
         this.collapseAccumulator -= steps * this.collapseInterval;
 
         const chunksToRender = new Set();
+        let impactBudget = this.collapseImpactBudgetPerStep;
+        const impactPosition = new THREE.Vector3();
 
         for (let step = 0; step < steps; step++) {
-            const { moved, changedChunks } = this.performCollapseStep(this.pendingCollapseChunks);
+            const { moved, changedChunks, impactEvents } = this.performCollapseStep(this.pendingCollapseChunks);
 
             for (const chunk of changedChunks) {
                 chunksToRender.add(chunk);
+            }
+
+            if (impactBudget > 0 && impactEvents.length > 0) {
+                for (const impact of impactEvents) {
+                    if (impactBudget <= 0) break;
+
+                    const count = impact.voxelType === 3
+                        ? this.collapseImpactCountCastle
+                        : this.collapseImpactCountBuilding;
+
+                    impactPosition.set(impact.x, impact.y, impact.z);
+
+                    const color = impact.voxelType === 3 ? 0x444444 : 0x808080;
+                    this.debrisSystem.spawnImpact(impactPosition, count, color);
+                    impactBudget -= 1;
+                }
             }
 
             if (!moved) {

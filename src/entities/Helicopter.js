@@ -2,11 +2,28 @@ import * as THREE from 'three';
 
 export default class Helicopter {
 
-    constructor(scene, position, terrainGenerator) {
+    constructor(scene, position, terrainGenerator, debrisSystem) {
+        if (!scene) {
+            throw new Error('Helicopter requires a scene.');
+        }
+
+        if (!position || !Number.isFinite(position.x) || !Number.isFinite(position.y) || !Number.isFinite(position.z)) {
+            throw new Error('Helicopter requires a position with numeric x, y, z.');
+        }
+
+        if (!terrainGenerator) {
+            throw new Error('Helicopter requires a terrainGenerator.');
+        }
+
+        if (!debrisSystem) {
+            throw new Error('Helicopter requires a debrisSystem.');
+        }
 
         this.scene = scene;
 
         this.terrainGenerator = terrainGenerator;
+
+        this.debrisSystem = debrisSystem;
 
         this.position = position.clone();
 
@@ -14,17 +31,71 @@ export default class Helicopter {
 
         this.rotation = new THREE.Euler();
 
-        // Create simple helicopter mesh
+        // Create voxel-style helicopter mesh
+        this.group = new THREE.Group();
+        this.group.position.copy(this.position);
 
-        const geometry = new THREE.BoxGeometry(2, 0.5, 4);
+        this.bodyGeometry = new THREE.BoxGeometry(1, 1, 1);
+        this.bodyMaterial = new THREE.MeshLambertMaterial({ color: 0xcc3333 });
+        this.detailMaterial = new THREE.MeshLambertMaterial({ color: 0x222222 });
+        this.glassMaterial = new THREE.MeshLambertMaterial({ color: 0x335577 });
 
-        const material = new THREE.MeshLambertMaterial({ color: 0xff0000 });
+        const addVoxel = (x, y, z, material) => {
+            if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
+                throw new Error('Helicopter voxel requires numeric coordinates.');
+            }
 
-        this.mesh = new THREE.Mesh(geometry, material);
+            if (!material) {
+                throw new Error('Helicopter voxel requires a material.');
+            }
 
-        this.mesh.position.copy(this.position);
+            const voxel = new THREE.Mesh(this.bodyGeometry, material);
+            voxel.position.set(x, y, z);
+            this.group.add(voxel);
+        };
 
-        this.scene.add(this.mesh);
+        // Body
+        for (let x = -1; x <= 1; x++) {
+            for (let y = 0; y <= 1; y++) {
+                for (let z = -2; z <= 2; z++) {
+                    addVoxel(x, y, z, this.bodyMaterial);
+                }
+            }
+        }
+
+        // Cockpit glass
+        for (let x = -1; x <= 1; x++) {
+            addVoxel(x, 2, -2, this.glassMaterial);
+        }
+
+        // Tail boom
+        for (let z = 3; z <= 6; z++) {
+            addVoxel(0, 1, z, this.bodyMaterial);
+        }
+
+        // Tail fin
+        addVoxel(0, 2, 6, this.bodyMaterial);
+
+        // Landing skids
+        for (let z = -1; z <= 2; z++) {
+            addVoxel(-2, 0, z, this.detailMaterial);
+            addVoxel(2, 0, z, this.detailMaterial);
+        }
+
+        // Rotor mast
+        addVoxel(0, 2, 0, this.detailMaterial);
+
+        // Main rotor
+        for (let x = -3; x <= 3; x++) {
+            if (x === 0) continue;
+            addVoxel(x, 3, 0, this.detailMaterial);
+        }
+
+        // Tail rotor
+        addVoxel(1, 2, 7, this.detailMaterial);
+        addVoxel(-1, 2, 7, this.detailMaterial);
+
+        this.scene.add(this.group);
 
         this.throttle = 5;
 
@@ -39,6 +110,8 @@ export default class Helicopter {
         this.yawSpeed = 0.5;
 
         this.time = 0;
+
+        this.destroyed = false;
 
     }
 
@@ -78,15 +151,26 @@ export default class Helicopter {
 
         }
 
-        this.mesh.position.copy(this.position);
+        this.group.position.copy(this.position);
 
-        this.mesh.rotation.copy(this.rotation);
+        this.group.rotation.copy(this.rotation);
 
     }
 
     destroy() {
 
-        this.scene.remove(this.mesh);
+        if (this.destroyed) return;
+
+        this.destroyed = true;
+
+        this.debrisSystem.spawn(this.position, 40, 0xcc3333);
+        this.debrisSystem.spawnImpact(this.position, 12, 0x222222);
+
+        this.scene.remove(this.group);
+        this.bodyGeometry.dispose();
+        this.bodyMaterial.dispose();
+        this.detailMaterial.dispose();
+        this.glassMaterial.dispose();
 
     }
 

@@ -62,13 +62,17 @@ export default class VoxelEngine {
         this.enemies = [];
 
         for (let i = 0; i < 3; i++) {
+            const offsetX = (i - 1) * 20;
+            const offsetZ = -60 - i * 15;
+            const terrainHeight = this.terrainGenerator.getHeightAt(offsetX, offsetZ);
 
-            const pos = new THREE.Vector3((i - 1) * 50, 60, 50);
+            if (!Number.isFinite(terrainHeight)) {
+                throw new Error('Enemy spawn requires a valid terrain height.');
+            }
 
-            const enemy = new Helicopter(this.sceneManager.scene, pos, this.terrainGenerator);
-
+            const pos = new THREE.Vector3(offsetX, terrainHeight + 25, offsetZ);
+            const enemy = new Helicopter(this.sceneManager.scene, pos, this.terrainGenerator, this.debrisSystem);
             this.enemies.push(enemy);
-
         }
         
         // Roman Army Cohorts

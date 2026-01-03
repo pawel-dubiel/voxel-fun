@@ -1,6 +1,6 @@
 # Apache Voxel Engine
 
-A retro-style, high-performance voxel flight simulator built with Three.js. Pilot an Apache helicopter through a procedurally generated world, engage enemy aircraft, and rain destruction upon ancient Roman cohorts and medieval fortresses.
+A retro-style, high-performance voxel arcade shooter built with Three.js. Pilot through a procedurally generated world, engage enemy aircraft, and rain destruction upon soldiers and buildings.
 
 
 ![Gameplay](gameplay.gif)
